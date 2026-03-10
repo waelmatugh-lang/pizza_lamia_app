@@ -66,5 +66,7 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>نحتاج موقعك لتوصيل الطلب بدقة وسرعة إلى عنوانك الصحيح.</string>
 </dict>
 </plist>
