@@ -74,4 +74,44 @@ class DeliveryLocationCubit extends Cubit<DeliveryLocationState> {
       ),
     );
   }
+
+  /// يُستدعى عند اختيار المستخدم عنواناً محفوظاً من القائمة.
+  /// يُحدّث الـ State مباشرة بالإحداثيات والعنوان النصي دون الحاجة لـ geocoding.
+  void selectSavedAddress({
+    required double lat,
+    required double lng,
+    required String addressText,
+  }) {
+    final newPosition = Position(
+      latitude: lat,
+      longitude: lng,
+      timestamp: DateTime.now(),
+      accuracy: 0,
+      altitude: 0,
+      altitudeAccuracy: 0,
+      heading: 0,
+      headingAccuracy: 0,
+      speed: 0,
+      speedAccuracy: 0,
+    );
+
+    bool distanceWarning = false;
+    if (state.actualDevicePosition != null) {
+      final double distanceInMeters = LocationService.distanceBetween(
+        state.actualDevicePosition!.latitude,
+        state.actualDevicePosition!.longitude,
+        lat,
+        lng,
+      );
+      distanceWarning = distanceInMeters > _warningDistanceMeters;
+    }
+
+    emit(
+      state.copyWith(
+        selectedDeliveryPosition: newPosition,
+        deliveryAddressText: addressText,
+        showDistanceWarning: distanceWarning,
+      ),
+    );
+  }
 }

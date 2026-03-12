@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'admin_orders_state.dart';
+import '../../../data/repositories/notification_repository.dart';
 
 class AdminOrdersCubit extends Cubit<AdminOrdersState> {
   final _supabase = Supabase.instance.client;
@@ -87,9 +89,9 @@ class AdminOrdersCubit extends Cubit<AdminOrdersState> {
   }
 
   Future<void> updateOrderStatus(String orderId, String newStatus) async {
-    stopSound(); // Fix 1: Stop alarm immediately
+    stopSound();
     try {
-      // Fix 2: Optimistic Local Update (Prevent row vanishing)
+      // Optimistic Local Update
       if (state is AdminOrdersLoaded) {
         final currentOrders = (state as AdminOrdersLoaded).orders;
         final updatedOrders = currentOrders.map((order) {
@@ -101,19 +103,43 @@ class AdminOrdersCubit extends Cubit<AdminOrdersState> {
         emit(AdminOrdersLoaded(updatedOrders));
       }
 
+      // 1) تحديث حالة الطلب في Supabase
       await _supabase
           .from('orders')
           .update({'status': newStatus})
           .eq('id', orderId);
     } catch (e) {
-      // Ignored: real-time stream handles reflection
+      debugPrint('[AdminOrdersCubit] ❌ فشل تحديث الطلب: $e');
+    }
+
+    // 2) إرسال الإشعار — try/catch منفصل لا يؤثر على منطق الطلب
+    try {
+      final orderRow = await _supabase
+          .from('orders')
+          .select('user_id')
+          .eq('id', orderId)
+          .maybeSingle();
+      final userId = orderRow?['user_id'] as String?;
+      if (userId != null && userId.isNotEmpty) {
+        final statusLabel = _getStatusLabel(newStatus);
+        await NotificationRepository().sendNotification(
+          userId: userId,
+          title: 'تحديث لطلبك 🍕',
+          body: 'تم تغيير حالة طلبك إلى: $statusLabel',
+        );
+        debugPrint('[AdminOrdersCubit] ✅ إشعار أُرسل لـ $userId');
+      } else {
+        debugPrint('[AdminOrdersCubit] ⚠️ لم يُوجد user_id للطلب $orderId');
+      }
+    } catch (e) {
+      debugPrint('[AdminOrdersCubit] ❌ فشل إرسال الإشعار: $e');
     }
   }
 
   Future<void> rejectOrder(String orderId, String reason) async {
-    stopSound(); // Fix 1: Stop alarm immediately
+    stopSound();
     try {
-      // Fix 2: Optimistic Local Update
+      // Optimistic Local Update
       if (state is AdminOrdersLoaded) {
         final currentOrders = (state as AdminOrdersLoaded).orders;
         final updatedOrders = currentOrders.map((order) {
@@ -129,12 +155,53 @@ class AdminOrdersCubit extends Cubit<AdminOrdersState> {
         emit(AdminOrdersLoaded(updatedOrders));
       }
 
+      // 1) تحديث حالة الطلب في Supabase
       await _supabase
           .from('orders')
           .update({'status': 'Cancelled', 'rejection_reason': reason})
           .eq('id', orderId);
     } catch (e) {
-      // Ignored: real-time stream handles reflection
+      debugPrint('[AdminOrdersCubit] ❌ فشل رفض الطلب: $e');
+    }
+
+    // 2) إرسال إشعار الرفض — try/catch منفصل
+    try {
+      final orderRow = await _supabase
+          .from('orders')
+          .select('user_id')
+          .eq('id', orderId)
+          .maybeSingle();
+      final userId = orderRow?['user_id'] as String?;
+      if (userId != null && userId.isNotEmpty) {
+        await NotificationRepository().sendNotification(
+          userId: userId,
+          title: '❌ تم رفض طلبك',
+          body: 'سبب الرفض: $reason',
+        );
+        debugPrint('[AdminOrdersCubit] ✅ إشعار رفض أُرسل لـ $userId');
+      } else {
+        debugPrint('[AdminOrdersCubit] ⚠️ لم يُوجد user_id للطلب $orderId');
+      }
+    } catch (e) {
+      debugPrint('[AdminOrdersCubit] ❌ فشل إرسال إشعار الرفض: $e');
+    }
+  }
+
+  /// تحويل الحالة إلى نص عربي للإشعار
+  String _getStatusLabel(String status) {
+    switch (status.toLowerCase()) {
+      case 'accepted':
+        return 'تم القبول ✅';
+      case 'preparing':
+        return 'قيد التحضير 👨‍🍳';
+      case 'on_the_way':
+        return 'في الطريق إليك 🛵';
+      case 'delivered':
+        return 'تم التسليم 🎉';
+      case 'cancelled':
+        return 'ملغي';
+      default:
+        return status;
     }
   }
 

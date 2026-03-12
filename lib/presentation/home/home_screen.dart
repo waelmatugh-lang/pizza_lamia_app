@@ -14,6 +14,10 @@ import 'details/pizza_details_screen.dart';
 import '../admin/admin_orders_screen.dart';
 import '../../core/cubit/delivery_location_cubit.dart';
 import '../../core/cubit/delivery_location_state.dart';
+import '../address/addresses_bottom_sheet.dart';
+import '../notifications/cubit/notification_cubit.dart';
+import '../notifications/cubit/notification_state.dart';
+import '../notifications/notifications_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -167,6 +171,7 @@ class _HomeContentState extends State<HomeContent> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         context.read<DeliveryLocationCubit>().initDefaultLocation();
+        context.read<NotificationCubit>().listenToNotifications();
       }
     });
   }
@@ -192,9 +197,7 @@ class _HomeContentState extends State<HomeContent> {
         title: BlocBuilder<DeliveryLocationCubit, DeliveryLocationState>(
           builder: (context, locState) {
             return InkWell(
-              onTap: () {
-                /* تغيير الموقع — مستقبلاً */
-              },
+              onTap: () => AddressesBottomSheet.show(context),
               borderRadius: BorderRadius.circular(8),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -248,6 +251,62 @@ class _HomeContentState extends State<HomeContent> {
           },
         ),
         actions: [
+          // ===== جرس الإشعارات =====
+          BlocBuilder<NotificationCubit, NotificationState>(
+            builder: (context, notifState) {
+              final unread = notifState is NotificationSuccess
+                  ? notifState.unreadCount
+                  : 0;
+              return Stack(
+                alignment: Alignment.center,
+                children: [
+                  IconButton(
+                    icon: const Icon(
+                      Icons.notifications_outlined,
+                      color: Colors.black87,
+                    ),
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => BlocProvider.value(
+                            value: context.read<NotificationCubit>(),
+                            child: const NotificationsScreen(),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  if (unread > 0)
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: Container(
+                        padding: const EdgeInsets.all(3),
+                        decoration: const BoxDecoration(
+                          color: Color(0xFFFF5722),
+                          shape: BoxShape.circle,
+                        ),
+                        constraints: const BoxConstraints(
+                          minWidth: 16,
+                          minHeight: 16,
+                        ),
+                        child: Text(
+                          unread > 9 ? '9+' : '$unread',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
+          // ===========================
           IconButton(
             icon: const Icon(Icons.dashboard, color: Color(0xFFFF5722)),
             onPressed: () {
